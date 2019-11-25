@@ -1,0 +1,203 @@
+
+Practical Machine Learning // Peer-graded Assignment: Prediction Assignment Writeup
+
+---
+Title: "Practical Machine Learning: Assessment Report"
+Author: "Ossama Embarak"
+Date: "25/11/2019"
+---
+
+
+Load relevant datasets
+
+```{r}
+Training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+Testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+
+Load packages we may need 
+
+```{r}
+library(ISLR)
+library(caret)
+library(kernlab)
+library(randomForest)
+library(rattle)
+
+library(ggplot2)
+
+library(ElemStatLearn)
+
+library(rpart)
+library(rpart.plot)
+
+```
+Explore the Training dataset
+
+```{r}
+dim(Training)
+str(Training)
+dim(Testing)
+str(Testing)
+
+```
+Explore the Testing dataset
+
+```{r}
+dim(Testing)
+str(Testing)
+dim(Testing)
+str(Testing)
+```
+
+Data cleaning,  check the missing values and correct it
+
+```{r}
+TrainingNNA <- Training[ , colSums(is.na(Training)) == 0]
+dim(TrainingNNA)
+str(TrainingNNA)
+
+```
+
+Remove any irrelevant variables
+
+```{r}
+remove = c('user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window',
+           'num_window','X')
+TrainingRV <- TrainingNNA[, -which(names(TrainingNNA) %in% remove)]
+dim(TrainingRV)
+
+```
+
+Check variables with too low variance
+
+```{r}
+NZV=  nearZeroVar(TrainingRV[sapply(TrainingRV, is.numeric)], saveMetrics = TRUE)
+trainingNNZV = TrainingRV[,NZV[, 'nzv']==0]
+dim(trainingNNZV)
+str(trainingNNZV)
+
+```
+
+
+Check high correlated variables
+```{r}
+CorrMX <- cor(na.omit(trainingNNZV[sapply(trainingNNZV, is.numeric)]))
+dim(CorrMX)
+
+```
+
+The plot correlated variable  
+```{r}
+corrvar <- expand.grid(row = 1:52, col = 1:52)
+corrvar$correlation <- as.vector(CorrMX)
+levelplot(correlation ~ row+ col, corrvar)
+
+```
+
+Maintain a cleaned copy
+```{r}
+trainingRDC<-trainingNNZV
+
+```
+
+Create both training and testing datasets
+
+```{r}
+inTrain <- createDataPartition(y=trainingRDC$classe, p=0.7, list=FALSE)
+TrainingCleanedData <- trainingRDC[inTrain,]; 
+testingData <- trainingRDC[-inTrain,]
+dim(TrainingCleanedData);
+dim(testingData)
+
+```
+
+
+Create decision tree with rpart from the caret package
+
+```{r}
+library(caret)
+set.seed(1000)
+Model1_Trained<-rpart(classe~., data= TrainingCleanedData, control = rpart.control(xval = 5))
+treeTraining<-train(classe ~., method = 'rpart', data=TrainingCleanedData)
+summary(treeTraining)
+print(treeTraining$Model1_Trained)
+
+```
+
+Use rattle to plot decision tree plot
+
+```{r}
+library(rattle)
+fancyRpartPlot(treeTraining$Model1_Trained)
+
+```
+
+Cross-validation of decision tree
+
+```{r}
+treepredict<-predict(Model1_Trained,testing)
+predOutput<-with(testing,table(treepredict,classe))
+sum(diag(predOutput))/sum(as.vector(predOutput))  
+```
+
+
+Although the model function properly, but we could get better results 
+Pruning the tree for better model performance 
+```{r}
+cvtraining=cv.tree(Model1_Trained,FUN=prune.misclass)
+cvtraining
+plot(cvtraining)
+ 
+```
+
+
+Apply a random forest model...
+```{r}
+library(randomForest)
+set.seed(1000)
+
+```
+
+
+Forming the random forest model
+```{r}
+Model2_ForestRND<- train(classe~., data = TrainingCleanedData, method = "rf", prox = TRUE)
+Model2_ForestRND
+
+```
+
+Check the created model 
+```{r}
+getTree(Model2_ForestRND$finalModel,k=2)
+
+```
+
+Eveluate the model predictions 
+```{r}
+Evaluate_Model2_Pred<-predict(modFit,testingData); testingData$predRight<-pred==testingData$classe
+table(Evaluate_Model2_Pred,testingData$classe)
+
+```
+
+The evaluation shows that the new model (Random Forest Model) is much better then the previous model (Decision Tree Model)
+Evaluate the model agints the test data set 
+
+```{r}
+FinalPredictions <- predict(Model2_ForestRND, testingData, type = "class")
+FinalPredictions
+
+ToFile = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("Case No:",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+ToFile(FinalPredictions)
+```
+
+
+End of the Assignment 
